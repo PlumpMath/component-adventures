@@ -1,4 +1,4 @@
-(ns no-component
+(ns sheet
   (:require [org.httpkit.client :as http]
             [clojure.data.json :as json]
             [clojure.core.async :as async :refer [go chan pub put! <!]])
@@ -21,35 +21,52 @@
        id  
        "/od6/public/values?alt=json"))
 
-;; this should be using a callback
 (defn grab-spreadsheet-json-string [url]  
   (-> url
       http/get 
       deref
       :body))
 
-(defn grab-json [json]
+(defn json->edn [json]
   (json/read-str json :key-fn keyword))
 
 (defn googify-column [column]
-  [(-> (str "gsx$" column) 
-        keyword)
+  [(-> "gsx$"
+       (str  column) 
+       keyword)
    (keyword column)])
 
-(defn get-row-seq [& keys] 
-  (-> "1HoGBhv9cgwcXKLFPExbezgJR8BGcaw9Gs5UrlhEiFRQ"
+(defn get-row-seq [spreadsheet-id  & keys] 
+  (-> spreadsheet-id
       make-spreadsheet-url
       grab-spreadsheet-json-string
-      grab-json
+      json->edn
       (get-in keys)))
 
-(defn grab-rows [sel-rows rows]
-  (reduce-kv (fn [m k v]
-               (if-let [k (k sel-rows)]
-                 (assoc m k (:$t v))
-                   m)) {} rows))
+(defn grab-rows 
+  ([rows]
+   (reduce-kv (fn [m k v]
+                (let [k (->> k
+                            name
+                            (drop 4)
+                            (apply str)
+                            keyword)]
+                  (if-let [v (:$t v)]
+                      (assoc m k v)
+                      m))) {} rows))
+  ([sel-rows rows]
+                 (reduce-kv (fn [m k v]
+                              (if-let [k (k sel-rows)]
+                                (assoc m k (:$t v))
+                                m)) {} rows)))
 
-(let [sel-rows (into {} 
-                     (map googify-column ["price" "strandname" "type"]))]
- (map (partial grab-rows sel-rows) (get-row-seq :feed :entry)))
+(defn tap-sheet [spreadsheet-id columns]
+  (let [sel-rows (map googify-column columns)
+        sel-rows-m (into {} sel-rows)
+        grab-rows (if (empty? sel-rows)  
+                    grab-rows
+                    (partial grab-rows sel-rows-m) )]
+    (map grab-rows (get-row-seq spreadsheet-id :feed :entry))))
 
+
+(tap-sheet "1HoGBhv9cgwcXKLFPExbezgJR8BGcaw9Gs5UrlhEiFRQ" ["price"])
