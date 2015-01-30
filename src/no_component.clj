@@ -49,8 +49,7 @@
                  (assoc m k (:$t v))
                    m)) {} rows))
 
-(get-row-seq :feed :entry)
-
-(let [sel-rows (into {} (map googify-column ["price" "strandname" "type"]))]
+(let [sel-rows (into {} 
+                     (map googify-column ["price" "strandname" "type"]))]
  (map (partial grab-rows sel-rows) (get-row-seq :feed :entry)))
 
